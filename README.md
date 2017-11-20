@@ -12,5 +12,5 @@ Students are expected to:
 Student Info
 =======================
 
-* Name: *YourNameHere*
-* ID: *YourIdHere*
+* Name: Dinh Ngoc Tu
+* ID: M.ICT.06.009
