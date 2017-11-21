@@ -1,0 +1,64 @@
+% !TEX TS-program = xelatex
+% !TEX encoding = UTF-8
+
+\documentclass[12pt]{article}
+
+\usepackage{fontspec} % Font selection for XeLaTeX; see fontspec.pdf for documentation
+\defaultfontfeatures{Mapping=tex-text} % to support TeX conventions like ``---''
+\usepackage{xunicode} % Unicode support for LaTeX character names (accents, European chars, etc)
+\usepackage{xltxtra} % Extra customizations for XeLaTeX
+
+\usepackage[parfill]{parskip} % Activate to begin paragraphs with an empty line rather than an indent
+
+\usepackage{graphicx} % support the \includegraphics command and options
+
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily,columns=fullflexible,keepspaces=true}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\title{Report 2: CUDA device info}
+\author{Dinh Ngoc Tu}
+
+\begin{document}
+\maketitle
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Device info program output}
+
+The CUDA device information on ict4 is as follows:
+
+\begin{lstlisting}[breaklines]
+3 devices found
+Information for device 0:
+Device name: GeForce GTX 1080
+Core count: 2560
+Core clock rate: 1835000 kHz
+Multiprocessor count: 20
+Warp size: 32 threads
+Memory clock rate: 5005000 kHz
+Memory bus width: 256 bits
+
+Information for device 1:
+Device name: GeForce GTX TITAN Black
+Core count: 2880
+Core clock rate: 980000 kHz
+Multiprocessor count: 15
+Warp size: 32 threads
+Memory clock rate: 3500000 kHz
+Memory bus width: 384 bits
+
+Information for device 2:
+Device name: GeForce GTX TITAN Black
+Core count: 2880
+Core clock rate: 980000 kHz
+Multiprocessor count: 15
+Warp size: 32 threads
+Memory clock rate: 3500000 kHz
+Memory bus width: 384 bits
+\end{lstlisting}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\end{document}
