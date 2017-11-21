@@ -6,7 +6,7 @@
 #define ACTIVE_THREADS 4
 
 int main(int argc, char **argv) {
-    printf("USTH ICT Master 2017, Advanced Programming for HPC.\n");
+    //printf("USTH ICT Master 2017, Advanced Programming for HPC.\n");
     if (argc < 2) {
         printf("Usage: labwork <lwNum> <inputImage>\n");
         printf("   lwNum        labwork number\n");
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     std::string inputFilename;
 
     // pre-initialize CUDA to avoid incorrect profiling
-    printf("Warming up...\n");
+    //printf("Warming up...\n");
     char *temp;
     cudaMalloc(&temp, 1024);
 
@@ -28,17 +28,18 @@ int main(int argc, char **argv) {
         labwork.loadInputImage(inputFilename);
     }
 
-    printf("Starting labwork %d\n", lwNum);
+    //printf("Starting labwork %d\n", lwNum);
     Timer timer;
     timer.start();
     switch (lwNum) {
         case 1:
             labwork.labwork1_CPU();
             labwork.saveOutputImage("labwork2-cpu-out.jpg");
-            printf("labwork 1 CPU ellapsed %.1fms\n", lwNum, timer.getElapsedTimeInMilliSec());
+            printf("labwork 1 CPU elapsed %.1fms\n", lwNum, timer.getElapsedTimeInMilliSec());
             timer.start();
             labwork.labwork1_OpenMP();
             labwork.saveOutputImage("labwork2-openmp-out.jpg");
+            printf("labwork 1 OpenMP elapsed %.1fms\n", lwNum, timer.getElapsedTimeInMilliSec());
             break;
         case 2:
             labwork.labwork2_GPU();
@@ -76,7 +77,7 @@ int main(int argc, char **argv) {
             labwork.saveOutputImage("labwork10-gpu-out.jpg");
             break;
     }
-    printf("labwork %d ellapsed %.1fms\n", lwNum, timer.getElapsedTimeInMilliSec());
+    //printf("labwork %d ellapsed %.1fms\n", lwNum, timer.getElapsedTimeInMilliSec());
 }
 
 void Labwork::loadInputImage(std::string inputFileName) {
@@ -101,7 +102,17 @@ void Labwork::labwork1_CPU() {
 }
 
 void Labwork::labwork1_OpenMP() {
-
+    int pixelCount = inputImage->width * inputImage->height;
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+    for (int j = 0; j < 100; j++) {		// let's do it 100 times, otherwise it's too fast!
+#pragma omp parallel for schedule(dynamic)
+        for (int i = 0; i < pixelCount; i++) {
+            outputImage[i * 3] = (char) (((int) inputImage->buffer[i * 3] + (int) inputImage->buffer[i * 3 + 1] +
+                                          (int) inputImage->buffer[i * 3 + 2]) / 3);
+            outputImage[i * 3 + 1] = outputImage[i * 3];
+            outputImage[i * 3 + 2] = outputImage[i * 3];
+        }
+    }
 }
 
 int getSPcores(cudaDeviceProp devProp) {
@@ -131,7 +142,29 @@ int getSPcores(cudaDeviceProp devProp) {
 }
 
 void Labwork::labwork2_GPU() {
-    
+    int numDevices;
+    if (cudaGetDeviceCount(&numDevices) != cudaSuccess) {
+        fprintf(stderr, "cannot get number of devices\n");
+        return;
+    }
+    printf("%d devices found\n", numDevices);
+    for (int i = 0; i < numDevices; i++) {
+        cudaDeviceProp prop;
+        if (cudaGetDeviceProperties(&prop, i) != cudaSuccess) {
+            fprintf(stderr, "cannot get device props\n");
+            return;
+        }
+        printf("Information for device %d:\n", i);
+        printf("Device name: %s\n", prop.name);
+        int cores = getSPcores(prop);
+        printf("Core count: %d\n", cores);
+        printf("Core clock rate: %d kHz\n", prop.clockRate);
+        printf("Multiprocessor count: %d\n", prop.multiProcessorCount);
+        printf("Warp size: %d threads\n", prop.warpSize);
+        printf("Memory clock rate: %d kHz\n", prop.memoryClockRate);
+        printf("Memory bus width: %d bits\n", prop.memoryBusWidth);
+        printf("\n");
+    }
 }
 
 void Labwork::labwork3_GPU() {
