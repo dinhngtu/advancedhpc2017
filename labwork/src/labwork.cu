@@ -51,8 +51,10 @@ int main(int argc, char **argv) {
             }
             break;
         case 4:
-            labwork.labwork4_GPU();
-            labwork.saveOutputImage("labwork4-gpu-out.jpg");
+            if (labwork.labwork4_GPU()) {
+                labwork.saveOutputImage("labwork4-gpu-out.jpg");
+                printf("labwork 4 elapsed %.1fms\n", timer.getElapsedTimeInMilliSec());
+            }
             break;
         case 5:
             labwork.labwork5_GPU();
@@ -206,6 +208,7 @@ int Labwork::labwork3_GPU() {
     for (int j = 0; j < 100; j++) {
         labwork3<<<numBlocks, blockSize>>>(inputCudaBuffer, outputCudaBuffer, pixelCount);
     }
+    cudaDeviceSynchronize();
     if (cudaMemcpy(outputImage, outputCudaBuffer, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost) != cudaSuccess) {
         fprintf(stderr, "output buffer copy error\n");
         return 0;
@@ -217,8 +220,58 @@ int Labwork::labwork3_GPU() {
     return 1;
 }
 
-void Labwork::labwork4_GPU() {
-   
+__global__ void labwork4(uchar3 * __restrict__ input, uchar3 * __restrict__ output, long long pixelCount, int width) {
+    long row = blockIdx.y * gridDim.y + threadIdx.y;
+    long long i = row * width + threadIdx.x;
+    if (i < pixelCount) {
+        output[i].x = (char)(((int)input[i].x + input[i].y + input[i].z) / 3);
+        output[i].y = output[i].z = output[i].x;
+    }
+}
+
+int Labwork::labwork4_GPU() {
+    long long pixelCount = inputImage->width * inputImage->height;
+    char *blockSizeEnv = getenv("LW4_CUDA_BLOCK_SIZE");
+    if (!blockSizeEnv) {
+        fprintf(stderr, "invalid block size\n");
+        return 0;
+    }
+    int blockSize = atoi(blockSizeEnv);
+
+    long gridWidth = (inputImage->width + blockSize - 1) / blockSize;
+    long gridHeight = (inputImage->width + blockSize - 1) / blockSize;
+    dim3 gdim(gridWidth, gridHeight);
+    dim3 bdim(blockSize, blockSize);
+
+    uchar3 *inputCudaBuffer;
+    if (cudaMalloc(&inputCudaBuffer, pixelCount * sizeof(uchar3)) != cudaSuccess) {
+        fprintf(stderr, "memory allocation error\n");
+        return 0;
+    }
+    uchar3 *outputCudaBuffer;
+    if (cudaMalloc(&outputCudaBuffer, pixelCount * sizeof(uchar3)) != cudaSuccess) {
+        fprintf(stderr, "memory allocation error\n");
+        return 0;
+    }
+
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+    if (cudaMemcpy(inputCudaBuffer, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice) != cudaSuccess) {
+        fprintf(stderr, "input buffer copy error\n");
+        return 0;
+    }
+    for (int j = 0; j < 100; j++) {
+        labwork4<<<gdim, bdim>>>(inputCudaBuffer, outputCudaBuffer, pixelCount, inputImage->width);
+    }
+    cudaDeviceSynchronize();
+    if (cudaMemcpy(outputImage, outputCudaBuffer, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost) != cudaSuccess) {
+        fprintf(stderr, "output buffer copy error\n");
+        return 0;
+    }
+
+    cudaFree(inputCudaBuffer);
+    cudaFree(outputCudaBuffer);
+
+    return 1;
 }
 
 void Labwork::labwork5_GPU() {
