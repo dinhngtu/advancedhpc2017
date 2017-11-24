@@ -354,6 +354,62 @@ void labwork5cpu(uchar3 * __restrict__ input, uchar3 * __restrict__ output, long
     }
 }
 
+__shared__ int CKERNEL[7][7];
+/*
+__constant__ int CKERNEL[7][7] = { // [r][c]
+    { 0, 0, 1, 2, 1, 0, 0 },
+    { 0, 3, 13, 22, 13, 3, 0 },
+    { 1, 13, 59, 97, 59, 13, 1 },
+    { 2, 22, 97, 159, 97, 22, 2 },
+    { 1, 13, 59, 97, 59, 13, 1 },
+    { 0, 3, 13, 22, 13, 3, 0 },
+    { 0, 0, 1, 2, 1, 0, 0 },
+};
+*/
+
+__global__ void labwork5sm(uchar3 * __restrict__ input, uchar3 * __restrict__ output, long pixelCount, int width, int height) {
+    if (threadIdx.x == 0 && threadIdx.y == 0) {
+        int kernel[7][7] = {
+            { 0, 0, 1, 2, 1, 0, 0 },
+            { 0, 3, 13, 22, 13, 3, 0 },
+            { 1, 13, 59, 97, 59, 13, 1 },
+            { 2, 22, 97, 159, 97, 22, 2 },
+            { 1, 13, 59, 97, 59, 13, 1 },
+            { 0, 3, 13, 22, 13, 3, 0 },
+            { 0, 0, 1, 2, 1, 0, 0 },
+        };
+        for (int j = 0; j < 7; j++) {
+            for (int i = 0; i < 7; i++) {
+                CKERNEL[j][i] = kernel[j][i];
+            }
+        }
+    }
+    __syncthreads();
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row >= height || col >= width) {
+        return;
+    }
+
+    long i = row * width + col; // position in image pixel stream
+    long sum = 0;
+    long acc = 0; // sum accumulator
+    for (int v = 0; v < 7; v++) { // r
+        for (int u = 0; u < 7; u++) { // c
+            int p = col + u - 3;
+            int q = row + v - 3;
+            if (p < 0 || p >= width || q < 0 || q >= height) {
+            } else {
+                long j = q * width + p;
+                int gray = ((int)input[j].x + input[j].y + input[j].z) / 3;
+                acc += gray * CKERNEL[v][u];
+                sum += CKERNEL[v][u];
+            }
+        }
+    }
+    output[i].x = output[i].y = output[i].z = (unsigned char)(acc / sum);
+}
+
 int Labwork::labwork5_GPU() {
     long long pixelCount = inputImage->width * inputImage->height;
     char *blockSizeEnv = getenv("LW5_CUDA_BLOCK_SIZE");
@@ -387,7 +443,7 @@ int Labwork::labwork5_GPU() {
     }
     //*/
     for (int j = 0; j < 100; j++) {
-        labwork5<<<gdim, bdim>>>(inputCudaBuffer, outputCudaBuffer, pixelCount, inputImage->width, inputImage->height);
+        labwork5sm<<<gdim, bdim>>>(inputCudaBuffer, outputCudaBuffer, pixelCount, inputImage->width, inputImage->height);
         //labwork5cpu((uchar3*)inputImage->buffer, (uchar3*)outputImage, pixelCount, inputImage->width, inputImage->height, blockSize);
     }
     ///*
