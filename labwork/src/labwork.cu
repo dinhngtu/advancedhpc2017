@@ -57,8 +57,12 @@ int main(int argc, char **argv) {
             }
             break;
         case 5:
-            labwork.labwork5_GPU();
-            labwork.saveOutputImage("labwork5-gpu-out.jpg");
+            if (labwork.labwork5_GPU()) {
+                labwork.saveOutputImage("labwork5-gpu-out.jpg");
+                printf("labwork 5 elapsed %.1fms\n", timer.getElapsedTimeInMilliSec());
+            } else {
+                printf("error\n");
+            }
             break;
         case 6:
             labwork.labwork6_GPU();
@@ -274,8 +278,130 @@ int Labwork::labwork4_GPU() {
     return 1;
 }
 
-void Labwork::labwork5_GPU() {
-    
+__global__ void labwork5(uchar3 * __restrict__ input, uchar3 * __restrict__ output, long pixelCount, int width, int height) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row >= height || col >= width) {
+        return;
+    }
+    long i = row * width + col; // position in image pixel stream
+    unsigned char kernel[7][7] = { // [r][c]
+        { 0, 0, 1, 2, 1, 0, 0 },
+        { 0, 3, 13, 22, 13, 3, 0 },
+        { 1, 13, 59, 97, 59, 13, 1 },
+        { 2, 22, 97, 159, 97, 22, 2 },
+        { 1, 13, 59, 97, 59, 13, 1 },
+        { 0, 3, 13, 22, 13, 3, 0 },
+        { 0, 0, 1, 2, 1, 0, 0 },
+    };
+    long sum = 0;
+    long acc = 0; // sum accumulator
+    for (int v = 0; v < 7; v++) { // r
+        for (int u = 0; u < 7; u++) { // c
+            int p = col + u - 3;
+            int q = row + v - 3;
+            if (p < 0 || p >= width || q < 0 || q >= height) {
+            } else {
+                long j = q * width + p;
+                int gray = ((int)input[j].x + input[j].y + input[j].z) / 3;
+                acc += gray * kernel[v][u];
+                sum += kernel[v][u];
+            }
+        }
+    }
+    output[i].x = output[i].y = output[i].z = (unsigned char)(acc / sum);
+}
+
+void labwork5cpu(uchar3 * __restrict__ input, uchar3 * __restrict__ output, long pixelCount, int width, int height, int blocksize) {
+    unsigned char kernel[7][7] = { // [r][c]
+        { 0, 0, 1, 2, 1, 0, 0 },
+        { 0, 3, 13, 22, 13, 3, 0 },
+        { 1, 13, 59, 97, 59, 13, 1 },
+        { 2, 22, 97, 159, 97, 22, 2 },
+        { 1, 13, 59, 97, 59, 13, 1 },
+        { 0, 3, 13, 22, 13, 3, 0 },
+        { 0, 0, 1, 2, 1, 0, 0 },
+    };
+    for (int gy = 0; gy < (height + blocksize - 1) / blocksize; gy++) {
+        for (int gx = 0; gx < (width + blocksize - 1) / blocksize; gx++) {
+            for (int ty = 0; ty < blocksize; ty++) {
+                for (int tx = 0; tx < blocksize; tx++) {
+    int row = gy * blocksize + ty;
+    int col = gx * blocksize + tx;
+    if (row >= height || col >= width) {
+        return;
+    }
+    long i = row * width + col; // position in image pixel stream
+    long sum = 0;
+    long acc = 0; // sum accumulator
+    for (int v = 0; v < 7; v++) { // r
+        for (int u = 0; u < 7; u++) { // c
+            int p = col + u - 3;
+            int q = row + v - 3;
+            if (p < 0 || p >= width || q < 0 || q >= height) {
+            } else {
+                long j = q * width + p;
+                int gray = ((int)input[j].x + input[j].y + input[j].z) / 3;
+                acc += gray * kernel[v][u];
+                sum += kernel[v][u];
+            }
+        }
+    }
+    output[i].x = output[i].y = output[i].z = (unsigned char)(acc / sum);
+                }
+            }
+        }
+    }
+}
+
+int Labwork::labwork5_GPU() {
+    long long pixelCount = inputImage->width * inputImage->height;
+    char *blockSizeEnv = getenv("LW5_CUDA_BLOCK_SIZE");
+    if (!blockSizeEnv) {
+        fprintf(stderr, "invalid block size\n");
+        return 0;
+    }
+    int blockSize = atoi(blockSizeEnv);
+
+    long gridWidth = (inputImage->width + blockSize - 1) / blockSize;
+    long gridHeight = (inputImage->width + blockSize - 1) / blockSize;
+    dim3 gdim(gridWidth, gridHeight);
+    dim3 bdim(blockSize, blockSize);
+
+    uchar3 *inputCudaBuffer;
+    if (cudaMalloc(&inputCudaBuffer, pixelCount * sizeof(uchar3)) != cudaSuccess) {
+        fprintf(stderr, "memory allocation error\n");
+        return 0;
+    }
+    uchar3 *outputCudaBuffer;
+    if (cudaMalloc(&outputCudaBuffer, pixelCount * sizeof(uchar3)) != cudaSuccess) {
+        fprintf(stderr, "memory allocation error\n");
+        return 0;
+    }
+
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+    ///*
+    if (cudaMemcpy(inputCudaBuffer, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice) != cudaSuccess) {
+        fprintf(stderr, "input buffer copy error\n");
+        return 0;
+    }
+    //*/
+    for (int j = 0; j < 100; j++) {
+        labwork5<<<gdim, bdim>>>(inputCudaBuffer, outputCudaBuffer, pixelCount, inputImage->width, inputImage->height);
+        //labwork5cpu((uchar3*)inputImage->buffer, (uchar3*)outputImage, pixelCount, inputImage->width, inputImage->height, blockSize);
+    }
+    ///*
+    cudaDeviceSynchronize();
+    if (cudaMemcpy(outputImage, outputCudaBuffer, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost) != cudaSuccess) {
+        fprintf(stderr, "output buffer copy error\n");
+        return 0;
+    }
+    //*/
+
+    cudaFree(inputCudaBuffer);
+    cudaFree(outputCudaBuffer);
+
+    return 1;
 }
 
 void Labwork::labwork6_GPU() {

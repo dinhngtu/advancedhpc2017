@@ -23,7 +23,7 @@ public:
 
     int labwork4_GPU();
 
-    void labwork5_GPU();
+    int labwork5_GPU();
 
     void labwork6_GPU();
 
